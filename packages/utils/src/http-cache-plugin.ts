@@ -52,6 +52,7 @@ import { ManagedPlugin } from "@mercuryworkshop/scramjet-controller";
 import type { Frame } from "@mercuryworkshop/scramjet-controller";
 
 export const CACHE_NAME = "scramjet-http-cache-v2";
+export const DEFAULT_MAX_CACHE_ENTRY_BYTES = 16 * 1024 * 1024;
 
 /** Header recording when this entry entered the cache (ms since epoch). */
 const STORED_AT_HEADER = "x-sj-cached-at";
@@ -170,7 +171,8 @@ function isCacheableMethod(method: string): boolean {
 function responseIsStorable(
 	status: number,
 	headers: Headers,
-	method: string
+	method: string,
+	maxEntryBytes: number
 ): boolean {
 	if (!isCacheableMethod(method)) return false;
 	if (!DEFAULT_CACHEABLE_STATUSES.has(status)) return false;
@@ -181,6 +183,34 @@ function responseIsStorable(
 	// "Vary: *" means "never reusable".
 	const vary = headers.get("vary");
 	if (vary && vary.split(",").some((v) => v.trim() === "*")) return false;
+
+	// Never drain large or streaming media into memory just to populate the
+	// Cache API. The proxy should preserve streaming behaviour for these.
+	const contentType = (headers.get("content-type") ?? "")
+		.split(";", 1)[0]
+		.trim()
+		.toLowerCase();
+	if (
+		contentType.startsWith("video/") ||
+		contentType.startsWith("audio/") ||
+		contentType === "text/event-stream" ||
+		contentType === "multipart/x-mixed-replace"
+	) {
+		return false;
+	}
+
+	const lengthHeader = headers.get("content-length");
+	if (lengthHeader) {
+		const length = Number(lengthHeader);
+		if (Number.isFinite(length) && length > maxEntryBytes) return false;
+	} else if (
+		contentType === "application/octet-stream" ||
+		contentType === "binary/octet-stream"
+	) {
+		// Unknown-size generic binary streams are often downloads/media. Avoid
+		// buffering an unbounded body when the server gives us no size hint.
+		return false;
+	}
 
 	return true;
 }
@@ -292,6 +322,8 @@ function buildStorableResponse(
 export interface HttpCachePluginOptions {
 	/** Name of the underlying Cache API entry. Defaults to CACHE_NAME. */
 	cacheName?: string;
+	/** Maximum buffered response size. Defaults to 16 MiB. */
+	maxEntryBytes?: number;
 }
 
 /**
@@ -303,6 +335,7 @@ export interface HttpCachePluginOptions {
  */
 export class HttpCachePlugin extends ManagedPlugin {
 	readonly cacheName: string;
+	readonly maxEntryBytes: number;
 
 	private cachePromise: Promise<Cache> | null = null;
 	// Marks requests whose `earlyResponse` we sourced from the cache, so the
@@ -313,6 +346,8 @@ export class HttpCachePlugin extends ManagedPlugin {
 	constructor(options: HttpCachePluginOptions = {}) {
 		super("scramjet-http-cache", []);
 		this.cacheName = options.cacheName ?? CACHE_NAME;
+		this.maxEntryBytes =
+			options.maxEntryBytes ?? DEFAULT_MAX_CACHE_ENTRY_BYTES;
 	}
 
 	/** Lazy-open the underlying Cache. Memoized for the plugin's lifetime. */
@@ -425,7 +460,14 @@ export class HttpCachePlugin extends ManagedPlugin {
 			if (!isCacheableMethod(req.method)) return;
 
 			const headers = nativeHeadersFromRaw(props.response.rawHeaders);
-			if (!responseIsStorable(props.response.status, headers, req.method))
+			if (
+				!responseIsStorable(
+					props.response.status,
+					headers,
+					req.method,
+					this.maxEntryBytes
+				)
+			)
 				return;
 
 			// Drain the stream once and rebuild the BareResponse around the
