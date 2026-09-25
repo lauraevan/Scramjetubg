@@ -229,9 +229,9 @@ function rewriteHtmlInner(
 					return true;
 				}
 			}
-
-			return false;
 		}
+
+		return false;
 	}
 
 	const isQuirky = detectQuirks();
