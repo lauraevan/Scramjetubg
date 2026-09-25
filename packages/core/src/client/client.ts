@@ -560,9 +560,15 @@ export class ScramjetClient {
 		});
 
 		for (const module of modules) {
-			if (!module.enabled || module.enabled(this))
-				module.default(this, this.global);
-			else if (module.disabled) module.disabled(this, this.global);
+			// A single missing/quirky browser interface must not leave the realm
+			// half-hooked. Install every independent module even if one fails.
+			try {
+				if (!module.enabled || module.enabled(this))
+					module.default(this, this.global);
+				else if (module.disabled) module.disabled(this, this.global);
+			} catch (err) {
+				dbg.error("failed to install scramjet module", err);
+			}
 		}
 	}
 
