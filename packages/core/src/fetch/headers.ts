@@ -13,6 +13,7 @@ import {
 import { RawHeaders } from "@mercuryworkshop/proxy-transports";
 import { _URL, _Set } from "@/shared/snapshot";
 import { createReferrerString } from "./util";
+import { parseDomain, ParseResultType } from "parse-domain";
 
 /**
  * Headers for security policy features that haven't been emulated yet
@@ -508,21 +509,14 @@ function computeSameSiteContext(
  * (localhost, IPs, and typical domain structures) without a full PSL lookup.
  */
 function registrableDomain(hostname: string): string {
-	// IPv4 / IPv6: site = exact IP
-	if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) return hostname;
+	const parsed = parseDomain(hostname);
 
-	const labels = hostname.split(".");
-	if (labels.length <= 1) return hostname; // bare hostname like "localhost"
+	if (parsed.type === ParseResultType.Listed && parsed.domain) {
+		return [parsed.domain, ...parsed.topLevelDomains].join(".");
+	}
 
-	// Strip a leading "www." for same-site comparison so that
-	// www.example.com and example.com are treated as the same site.
-	// More complex cases (e.g. s1.s2.example.co.uk) are not handled here
-	// but are uncommon in test environments.
-	if (labels[0] === "www") return labels.slice(1).join(".");
-
-	// For two-label hostnames like "example.com", use as-is
-	if (labels.length === 2) return hostname;
-
-	// For longer hostnames, use the last two labels as a rough eTLD+1
-	return labels.slice(-2).join(".");
+	// IPs, localhost/reserved names, and unknown suffixes are safest when
+	// compared as exact hosts. This avoids accidentally treating unrelated
+	// registrants under a multi-label or private suffix as same-site.
+	return hostname;
 }
