@@ -114,6 +114,17 @@ export default [
 		`,
 	}),
 	basicTest({
+		name: "elurls-audio-explicit-empty-url",
+		js: `
+			const audio = new Audio("");
+			assertEqual(
+				audio.src,
+				location.href,
+				'an explicit empty Audio URL resolves against the current document'
+			);
+		`,
+	}),
+	basicTest({
 		name: "elurls-request-response",
 		js: `
 			assertEqual(new Request("/api").url, location.origin + "/api", "Request.url");
