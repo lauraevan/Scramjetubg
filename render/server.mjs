@@ -44,7 +44,14 @@ function safePath(urlPath) {
 
 function cacheControlFor(filePath) {
 	const rel = path.relative(publicDir, filePath).replaceAll("\\", "/");
-	if (rel === "index.html") return "no-cache";
+	if (
+		rel === "index.html" ||
+		rel === "sw.js" ||
+		rel.startsWith("scramjet/") ||
+		rel.startsWith("controller/")
+	) {
+		return "no-cache";
+	}
 	if (/^assets\/.+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(rel)) {
 		return "public, max-age=31536000, immutable";
 	}
