@@ -36,6 +36,25 @@ import { assertRuntimeScramjetVersion } from "./version";
 export { VERSION } from "./version";
 export { assertRuntimeScramjetVersion } from "./version";
 
+function supportsTransferableStreams(): boolean {
+	try {
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.close();
+			},
+		});
+		const channel = new MessageChannel();
+		channel.port1.postMessage(stream, [stream]);
+		channel.port1.close();
+		channel.port2.close();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+const TRANSFERABLE_STREAMS = supportsTransferableStreams();
+
 export type Config = {
 	prefix: string;
 	scramjetPath: string;
@@ -323,16 +342,26 @@ export class Controller {
 					clientId: data.clientId,
 				});
 
+				let responseBody = fetchresponse.body;
+				if (
+					responseBody instanceof ReadableStream &&
+					!TRANSFERABLE_STREAMS
+				) {
+					// Safari/WebKit currently exposes ReadableStream but cannot transfer
+					// streams over MessagePort. Buffer only on browsers that need it.
+					responseBody = await new Response(responseBody).arrayBuffer();
+				}
+
 				return [
 					{
-						body: fetchresponse.body,
+						body: responseBody,
 						status: fetchresponse.status,
 						statusText: fetchresponse.statusText,
 						headers: fetchresponse.headers.toRawHeaders(),
 					},
-					fetchresponse.body instanceof ReadableStream ||
-					fetchresponse.body instanceof ArrayBuffer
-						? [fetchresponse.body]
+					responseBody instanceof ReadableStream ||
+					responseBody instanceof ArrayBuffer
+						? [responseBody]
 						: [],
 				];
 			} catch (e) {
