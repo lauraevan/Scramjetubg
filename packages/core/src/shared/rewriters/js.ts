@@ -27,6 +27,118 @@ type RewriteFailureMode = "compat" | "passthrough";
 const REWRITE_FAILURE_CACHE_LIMIT = 256;
 const rewriteFailureCache = new _Map<string, RewriteFailureMode>();
 
+type RewriteSuccessEntry = {
+	value: string | Uint8Array;
+	bytes: number;
+};
+
+const REWRITE_SUCCESS_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+const REWRITE_SUCCESS_CACHE_MAX_ENTRY_BYTES = 10 * 1024 * 1024;
+const REWRITE_SUCCESS_CACHE_MIN_ENTRY_BYTES = 1024;
+const rewriteSuccessCache = new _Map<string, RewriteSuccessEntry>();
+let rewriteSuccessCacheBytes = 0;
+
+function inputLength(input: string | Uint8Array): number {
+	return typeof input === "string" ? input.length : input.byteLength;
+}
+
+function hashInput(input: string | Uint8Array): string {
+	let hash = 0x811c9dc5;
+	if (typeof input === "string") {
+		for (let i = 0; i < input.length; i++) {
+			const code = input.charCodeAt(i);
+			hash ^= code & 0xff;
+			hash = Math.imul(hash, 0x01000193);
+			hash ^= code >>> 8;
+			hash = Math.imul(hash, 0x01000193);
+		}
+	} else {
+		for (let i = 0; i < input.length; i++) {
+			hash ^= input[i];
+			hash = Math.imul(hash, 0x01000193);
+		}
+	}
+	return (hash >>> 0).toString(16);
+}
+
+function rewriteFlagsSignature(
+	context: ScramjetContext,
+	meta: URLMeta
+): string {
+	let signature = "";
+	for (const flag of Object_keys(context.config.flags)) {
+		signature += flagEnabled(flag as any, context, meta.base) ? "1" : "0";
+	}
+	return signature;
+}
+
+function makeRewriteSuccessKey(
+	input: string | Uint8Array,
+	source: string | null,
+	context: ScramjetContext,
+	meta: URLMeta,
+	isModule: boolean
+): string {
+	return [
+		isModule ? "m" : "s",
+		source || "(unknown)",
+		context.prefix.pathname,
+		meta.base.href,
+		rewriteFlagsSignature(context, meta),
+		inputLength(input),
+		hashInput(input),
+	].join("|");
+}
+
+function getCachedRewrite(key: string): string | Uint8Array | null {
+	const entry = rewriteSuccessCache.get(key);
+	if (!entry) return null;
+
+	// refresh insertion order so this behaves like a small LRU.
+	rewriteSuccessCache.delete(key);
+	rewriteSuccessCache.set(key, entry);
+
+	return typeof entry.value === "string"
+		? entry.value
+		: new _Uint8Array(entry.value);
+}
+
+function rememberSuccessfulRewrite(
+	key: string,
+	value: string | Uint8Array
+): void {
+	const bytes =
+		typeof value === "string" ? value.length * 2 : value.byteLength;
+	if (
+		bytes < REWRITE_SUCCESS_CACHE_MIN_ENTRY_BYTES ||
+		bytes > REWRITE_SUCCESS_CACHE_MAX_ENTRY_BYTES
+	) {
+		return;
+	}
+
+	const existing = rewriteSuccessCache.get(key);
+	if (existing) {
+		rewriteSuccessCacheBytes -= existing.bytes;
+		rewriteSuccessCache.delete(key);
+	}
+
+	const stored =
+		typeof value === "string" ? value : new _Uint8Array(value);
+	rewriteSuccessCache.set(key, { value: stored, bytes });
+	rewriteSuccessCacheBytes += bytes;
+
+	while (
+		rewriteSuccessCacheBytes > REWRITE_SUCCESS_CACHE_MAX_BYTES &&
+		rewriteSuccessCache.size > 0
+	) {
+		const oldestKey = rewriteSuccessCache.keys().next().value;
+		if (oldestKey === undefined) break;
+		const oldest = rewriteSuccessCache.get(oldestKey);
+		rewriteSuccessCache.delete(oldestKey);
+		if (oldest) rewriteSuccessCacheBytes -= oldest.bytes;
+	}
+}
+
 function makeRewriteFingerprint(
 	input: string | Uint8Array,
 	source: string | null,
@@ -184,6 +296,17 @@ export function rewriteJs(
 ): string | Uint8Array {
 	const failureKey = makeRewriteFingerprint(js, url, isModule);
 	const knownFailure = rewriteFailureCache.get(failureKey);
+	const successCacheEnabled =
+		inputLength(js) >= REWRITE_SUCCESS_CACHE_MIN_ENTRY_BYTES &&
+		!flagEnabled("sourcemaps", context, meta.base);
+	const successKey = successCacheEnabled
+		? makeRewriteSuccessKey(js, url, context, meta, isModule)
+		: null;
+
+	if (successKey) {
+		const cached = getCachedRewrite(successKey);
+		if (cached !== null) return cached;
+	}
 
 	if (knownFailure === "passthrough" && flagEnabled("allowInvalidJs", context, meta.base)) {
 		return js;
@@ -191,7 +314,15 @@ export function rewriteJs(
 
 	if (knownFailure === "compat") {
 		try {
-			return rewriteJsCompatibility(js, url, context, meta, isModule);
+			const compat = rewriteJsCompatibility(
+				js,
+				url,
+				context,
+				meta,
+				isModule
+			);
+			if (successKey) rememberSuccessfulRewrite(successKey, compat);
+			return compat;
 		} catch {
 			if (flagEnabled("allowInvalidJs", context, meta.base)) {
 				rememberRewriteFailure(failureKey, "passthrough");
@@ -231,6 +362,7 @@ export function rewriteJs(
 			}
 		}
 
+		if (successKey) rememberSuccessfulRewrite(successKey, newjs);
 		return newjs;
 	} catch (err) {
 		const firstError = err as Error;
@@ -252,6 +384,7 @@ export function rewriteJs(
 			if (flagEnabled("rewriterLogs", context, meta.base)) {
 				dbg.warn("compatibility rewrite succeeded for", url || "(unknown)");
 			}
+			if (successKey) rememberSuccessfulRewrite(successKey, retry);
 			return retry;
 		} catch (retryErr) {
 			const secondError = retryErr as Error;
