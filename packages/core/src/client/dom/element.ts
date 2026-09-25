@@ -298,11 +298,15 @@ export default function (client: ScramjetClient, self: typeof window) {
 			const ruleList = findHtmlRule(String(name), tagName);
 
 			if (ruleList) {
+				const attributeMap =
+					ruleList.fn.length >= 4
+						? collectAttributeMap(client, ctx.this, name, value)
+						: undefined;
 				const ret = ruleList.fn(
 					value,
 					client.context,
 					client.meta,
-					collectAttributeMap(client, ctx.this, name, value)
+					attributeMap
 				);
 				if (ret == null) {
 					client.natives.call(
@@ -338,11 +342,15 @@ export default function (client: ScramjetClient, self: typeof window) {
 			);
 
 			if (ruleList) {
+				const attributeMap =
+					ruleList.fn.length >= 4
+						? collectAttributeMap(client, ctx.this, name, value)
+						: undefined;
 				ctx.args[2] = ruleList.fn(
 					value,
 					client.context,
 					client.meta,
-					collectAttributeMap(client, ctx.this, name, value)
+					attributeMap
 				);
 				client.natives.call(
 					"Element.prototype.setAttribute",
