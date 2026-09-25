@@ -9,6 +9,7 @@ import {
 	_Uint8Array,
 	Object_keys,
 	Performance_now,
+	_Map,
 } from "../snapshot";
 
 // eslint-disable-next-line scramjet-core/no-globals
@@ -20,6 +21,71 @@ type RewriterResult = {
 	tag: string;
 	errors: string[];
 };
+
+type RewriteFailureMode = "compat" | "passthrough";
+
+const REWRITE_FAILURE_CACHE_LIMIT = 256;
+const rewriteFailureCache = new _Map<string, RewriteFailureMode>();
+
+function makeRewriteFingerprint(
+	input: string | Uint8Array,
+	source: string | null,
+	isModule: boolean
+): string {
+	const length = typeof input === "string" ? input.length : input.byteLength;
+	let head = "";
+	let tail = "";
+
+	if (typeof input === "string") {
+		head = input.slice(0, 64);
+		tail = input.slice(-64);
+	} else {
+		const encodeEdge = (start: number, end: number) => {
+			let out = "";
+			for (let i = start; i < end; i++) {
+				out += input[i].toString(16).padStart(2, "0");
+			}
+			return out;
+		};
+		head = encodeEdge(0, Math.min(24, input.length));
+		tail = encodeEdge(Math.max(0, input.length - 24), input.length);
+	}
+
+	return `${isModule ? "m" : "s"}:${source || "(unknown)"}:${length}:${head}:${tail}`;
+}
+
+function rememberRewriteFailure(key: string, mode: RewriteFailureMode) {
+	if (!rewriteFailureCache.has(key) && rewriteFailureCache.size >= REWRITE_FAILURE_CACHE_LIMIT) {
+		const oldest = rewriteFailureCache.keys().next().value;
+		if (oldest !== undefined) rewriteFailureCache.delete(oldest);
+	}
+	rewriteFailureCache.set(key, mode);
+}
+
+function previewJs(input: string | Uint8Array): string {
+	const limit = 512;
+	if (typeof input === "string") {
+		return input.length > limit ? input.slice(0, limit) + "…" : input;
+	}
+	const slice = input.subarray(0, Math.min(limit, input.length));
+	const decoded = TextDecoder_decode(slice);
+	return input.length > limit ? decoded + "…" : decoded;
+}
+
+function rewriteJsCompatibility(
+	js: string | Uint8Array,
+	url: string | null,
+	context: ScramjetContext,
+	meta: URLMeta,
+	isModule: boolean
+): string | Uint8Array {
+	return rewriteJsWasm(js, url, context, meta, isModule, {
+		destructureRewrites: false,
+		captureErrors: false,
+		scramitize: false,
+		sourcemaps: false,
+	}).js;
+}
 function rewriteJsWasm(
 	input: string | Uint8Array,
 	source: string | null,
@@ -116,6 +182,24 @@ export function rewriteJs(
 	meta: URLMeta,
 	isModule = false
 ): string | Uint8Array {
+	const failureKey = makeRewriteFingerprint(js, url, isModule);
+	const knownFailure = rewriteFailureCache.get(failureKey);
+
+	if (knownFailure === "passthrough" && flagEnabled("allowInvalidJs", context, meta.base)) {
+		return js;
+	}
+
+	if (knownFailure === "compat") {
+		try {
+			return rewriteJsCompatibility(js, url, context, meta, isModule);
+		} catch {
+			if (flagEnabled("allowInvalidJs", context, meta.base)) {
+				rememberRewriteFailure(failureKey, "passthrough");
+				return js;
+			}
+		}
+	}
+
 	try {
 		const res = rewriteJsInner(js, url, context, meta, isModule);
 		let newjs = res.js;
@@ -154,7 +238,8 @@ export function rewriteJs(
 			"failed rewriting js for",
 			url || "(unknown)",
 			firstError.message,
-			typeof js !== "string" ? TextDecoder_decode(js) : js
+			`length=${typeof js === "string" ? js.length : js.byteLength}`,
+			previewJs(js)
 		);
 
 		// Compatibility retry: a number of large/minified applications trip
@@ -162,16 +247,12 @@ export function rewriteJs(
 		// Retry once with the highest-risk transforms disabled before falling
 		// back to the original source.
 		try {
-			const retry = rewriteJsWasm(js, url, context, meta, isModule, {
-				destructureRewrites: false,
-				captureErrors: false,
-				scramitize: false,
-				sourcemaps: false,
-			});
+			const retry = rewriteJsCompatibility(js, url, context, meta, isModule);
+			rememberRewriteFailure(failureKey, "compat");
 			if (flagEnabled("rewriterLogs", context, meta.base)) {
 				dbg.warn("compatibility rewrite succeeded for", url || "(unknown)");
 			}
-			return retry.js;
+			return retry;
 		} catch (retryErr) {
 			const secondError = retryErr as Error;
 			dbg.warn(
@@ -182,6 +263,7 @@ export function rewriteJs(
 		}
 
 		if (flagEnabled("allowInvalidJs", context, meta.base)) {
+			rememberRewriteFailure(failureKey, "passthrough");
 			return js;
 		}
 		throw firstError;
