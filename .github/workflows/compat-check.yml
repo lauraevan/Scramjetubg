@@ -71,7 +71,7 @@ jobs:
             "private": true,
             "type": "module",
             "engines": {
-              "node": ">=20"
+              "node": "22.x"
             },
             "dependencies": {
               "@mercuryworkshop/wisp-js": "0.4.1"
