@@ -28,7 +28,7 @@ const REWRITE_FAILURE_CACHE_LIMIT = 256;
 const rewriteFailureCache = new _Map<string, RewriteFailureMode>();
 
 type RewriteSuccessEntry = {
-	value: string | Uint8Array;
+	value: string;
 	bytes: number;
 };
 
@@ -91,25 +91,28 @@ function makeRewriteSuccessKey(
 	].join("|");
 }
 
-function getCachedRewrite(key: string): string | Uint8Array | null {
+function getCachedRewrite(key: string): string | null {
 	const entry = rewriteSuccessCache.get(key);
 	if (!entry) return null;
 
-	// refresh insertion order so this behaves like a small LRU.
+	// Refresh insertion order so this behaves like a small LRU. Cached JS is
+	// stored as an immutable string, so a hit does not clone megabytes of bytes.
 	rewriteSuccessCache.delete(key);
 	rewriteSuccessCache.set(key, entry);
 
-	return typeof entry.value === "string"
-		? entry.value
-		: new _Uint8Array(entry.value);
+	return entry.value;
 }
 
 function rememberSuccessfulRewrite(
 	key: string,
 	value: string | Uint8Array
 ): void {
-	const bytes =
-		typeof value === "string" ? value.length * 2 : value.byteLength;
+	// JavaScript source is UTF-8 text. Decode byte output once on the cold path
+	// so warm cache hits can return an immutable string without allocating or
+	// copying a second multi-megabyte buffer.
+	const stored =
+		typeof value === "string" ? value : TextDecoder_decode(value);
+	const bytes = stored.length * 2;
 	if (
 		bytes < REWRITE_SUCCESS_CACHE_MIN_ENTRY_BYTES ||
 		bytes > REWRITE_SUCCESS_CACHE_MAX_ENTRY_BYTES
@@ -123,8 +126,6 @@ function rememberSuccessfulRewrite(
 		rewriteSuccessCache.delete(key);
 	}
 
-	const stored =
-		typeof value === "string" ? value : new _Uint8Array(value);
 	rewriteSuccessCache.set(key, { value: stored, bytes });
 	rewriteSuccessCacheBytes += bytes;
 
