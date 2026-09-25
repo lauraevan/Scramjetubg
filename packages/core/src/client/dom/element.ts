@@ -641,7 +641,11 @@ export default function (client: ScramjetClient, self: typeof window) {
 
 	client.Proxy("Audio", {
 		construct(ctx) {
-			if (ctx.args[0]) ctx.args[0] = client.rewriteUrl(ctx.args[0]);
+			// An omitted argument means "no source", but an explicit empty
+			// string is a real URL that resolves against the current document.
+			if (ctx.args.length > 0 && ctx.args[0] !== undefined) {
+				ctx.args[0] = client.rewriteUrl(ctx.args[0]);
+			}
 		},
 	});
 	client.Proxy("Text.prototype.appendData", {
