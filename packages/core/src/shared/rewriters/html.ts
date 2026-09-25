@@ -5,7 +5,7 @@ import { URLMeta, rewriteUrl } from "@rewriters/url";
 import { rewriteCss } from "@rewriters/css";
 import { rewriteJs } from "@rewriters/js";
 import { ScramjetContext } from "@/shared";
-import { htmlRules } from "@/shared/htmlRules";
+import { findHtmlRule } from "@/shared/htmlRules";
 import { parseDeclarativeRefresh } from "@/shared/refresh";
 import { bytesToBase64 } from "@/shared/util";
 import { Tap } from "@/Tap";
@@ -353,25 +353,16 @@ function traverseParsedHtml(
 	}
 
 	if (node.attribs) {
-		for (const rule of htmlRules) {
-			for (const attr in rule) {
-				const sel = rule[attr.toLowerCase()];
-				if (typeof sel === "function") continue;
+		for (const [attr, value] of Object_entries(node.attribs)) {
+			const rule = findHtmlRule(attr, node.name);
+			if (!rule) continue;
 
-				if (sel === "*" || sel.includes(node.name)) {
-					if (node.attribs[attr] !== undefined) {
-						const value = node.attribs[attr];
-						const v = rule.fn(value, context, meta, node.attribs);
-
-						if (v === null) delete node.attribs[attr];
-						else {
-							node.attribs[attr] = v;
-						}
-						node.attribs[`scramjet-attr-${attr}`] = value;
-					}
-				}
-			}
+			const rewritten = rule.fn(value, context, meta, node.attribs);
+			if (rewritten === null) delete node.attribs[attr];
+			else node.attribs[attr] = rewritten;
+			node.attribs[`scramjet-attr-${attr}`] = value;
 		}
+
 		for (const [attr, value] of Object_entries(node.attribs)) {
 			if (eventAttributes.includes(attr)) {
 				node.attribs[`scramjet-attr-${attr}`] = value;
