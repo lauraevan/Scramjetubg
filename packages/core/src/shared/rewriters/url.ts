@@ -6,6 +6,8 @@ import {
 	TextEncoder_encode,
 	_URL,
 	_URLSearchParams,
+	_Map,
+	_WeakMap,
 	atob,
 	String,
 	String_startsWith,
@@ -36,6 +38,60 @@ export type URLMeta = {
 	parentFrameName?: string;
 	referrerPolicy?: string;
 };
+
+const URL_REWRITE_CACHE_LIMIT = 2048;
+const urlRewriteCaches = new _WeakMap<
+	ScramjetContext,
+	_Map<string, string>
+>();
+
+function urlRewriteCache(context: ScramjetContext): _Map<string, string> {
+	let cache = urlRewriteCaches.get(context);
+	if (!cache) {
+		cache = new _Map<string, string>();
+		urlRewriteCaches.set(context, cache);
+	}
+	return cache;
+}
+
+function urlRewriteCacheKey(
+	url: string,
+	meta: URLMeta,
+	options?: RewriteUrlOptions
+): string {
+	return [
+		url,
+		meta.base.href,
+		meta.origin.origin,
+		meta.referrerPolicy ?? "",
+		options?.referrerPolicy ?? "",
+		options?.isModule ? "1" : "0",
+		options?.navigateType ?? "",
+		options?.topFrame ?? "",
+		options?.parentFrame ?? "",
+		options?.isIframe ?? "",
+		options?.mode ?? "",
+		options?.credentials ?? "",
+		options?.destination ?? "",
+	].join("\x1f");
+}
+
+function rememberUrlRewrite(
+	context: ScramjetContext,
+	key: string,
+	value: string
+): string {
+	const cache = urlRewriteCache(context);
+	if (cache.has(key)) cache.delete(key);
+	cache.set(key, value);
+
+	if (cache.size > URL_REWRITE_CACHE_LIMIT) {
+		const oldest = cache.keys().next().value;
+		if (oldest !== undefined) cache.delete(oldest);
+	}
+
+	return value;
+}
 
 function tryCanParseURL(url: string, origin?: string | URL): _URL | null {
 	try {
@@ -157,6 +213,15 @@ export function rewriteUrl(
 	) {
 		return url;
 	} else {
+		const cacheKey = urlRewriteCacheKey(url, meta, options);
+		const cache = urlRewriteCache(context);
+		const cached = cache.get(cacheKey);
+		if (cached !== undefined) {
+			cache.delete(cacheKey);
+			cache.set(cacheKey, cached);
+			return cached;
+		}
+
 		let base = meta.base.href;
 
 		if (String_startsWith(base, "about:"))
@@ -199,11 +264,13 @@ export function rewriteUrl(
 		let paramstring = "";
 		if (paramsInit.toString()) paramstring = "?" + paramsInit.toString();
 
-		return (
+		return rememberUrlRewrite(
+			context,
+			cacheKey,
 			context.prefix.href +
-			context.interface.codecEncode(realUrl.href) +
-			paramstring +
-			realHash
+				context.interface.codecEncode(realUrl.href) +
+				paramstring +
+				realHash
 		);
 	}
 }
