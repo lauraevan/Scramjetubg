@@ -2,6 +2,7 @@ import { css, createDelegate, type Component } from "dreamland/core";
 import type { Frame } from "@mercuryworkshop/scramjet-controller";
 import FlagEditor from "./components/FlagEditor";
 import BrowserView from "./pages/BrowserView";
+import MoviesView from "./pages/MoviesView";
 import RequestViewer from "./pages/RequestViewer";
 import PlaygroundView from "./pages/Playground";
 import SettingsView from "./pages/SettingsPage";
@@ -12,7 +13,7 @@ const App: Component<
 	{},
 	{},
 	{
-		activeTab: "browser" | "requests" | "playground" | "settings";
+		activeTab: "browser" | "movies" | "requests" | "playground" | "settings";
 	}
 > = function (cx) {
 	this.activeTab ??= "browser";
@@ -29,6 +30,16 @@ const App: Component<
 						}}
 					>
 						Browser
+					</button>
+					<button
+						class={use(this.activeTab).map(
+							(tab) => `tab-button ${tab === "movies" ? "active" : ""}`
+						)}
+						on:click={() => {
+							this.activeTab = "movies";
+						}}
+					>
+						Movies
 					</button>
 					<button
 						class={use(this.activeTab).map(
@@ -84,6 +95,14 @@ const App: Component<
 			<div
 				class={use(this.activeTab).map(
 					(tab) =>
+						`tab-panel movies-panel ${tab === "movies" ? "active" : ""}`
+				)}
+			>
+				<MoviesView />
+			</div>
+			<div
+				class={use(this.activeTab).map(
+					(tab) =>
 						`tab-panel requests-panel ${tab === "requests" ? "active" : ""}`
 				)}
 			>
@@ -126,7 +145,6 @@ App.style = css`
 		position: absolute;
 		top: 0;
 		left: 0;
-
 		padding: 0;
 		background: black;
 		box-sizing: border-box;
@@ -202,6 +220,7 @@ App.style = css`
 	.tab-panel.active {
 		display: flex;
 	}
+	.movies-panel,
 	.requests-panel {
 		flex-direction: column;
 	}
