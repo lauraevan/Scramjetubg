@@ -83,12 +83,21 @@ export async function rewriteBody(
 					return response.body;
 				}
 
+				const etag = response.headers.get("etag");
+				const lastModified = response.headers.get("last-modified");
+				const cacheValidator = etag
+					? `etag:${etag}`
+					: lastModified
+						? `last-modified:${lastModified}`
+						: null;
+
 				let rewritten = rewriteJs(
 					new Uint8Array(await response.arrayBuffer()),
 					response.url,
 					handler.context,
 					parsed.meta,
-					parsed.isModule
+					parsed.isModule,
+					cacheValidator
 				);
 
 				if (
