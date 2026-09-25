@@ -12,15 +12,211 @@ let app = document.getElementById("app")!;
 let controller: InstanceType<typeof Controller>;
 const cachePlugin = new HttpCachePlugin();
 
-export function getTransport(): LibcurlClient | EpoxyClient {
-	const wispUrl = demoSettingsStore.wispUrl;
-	switch (demoSettingsStore.transport) {
-		case "epoxy":
-			return new EpoxyClient({ wisp: wispUrl });
-		case "libcurl":
-		default:
-			return new LibcurlClient({ wisp: wispUrl });
+type RawHeaders = [string, string][];
+type WebSocketData = Blob | ArrayBuffer | string;
+type TransportResponse = {
+	body: ReadableStream | ArrayBuffer | Blob | string;
+	headers: RawHeaders;
+	status: number;
+	statusText: string;
+};
+type TransportLike = {
+	ready: boolean;
+	init(): Promise<void>;
+	request(
+		remote: URL,
+		method: string,
+		body: any,
+		headers: RawHeaders,
+		signal: AbortSignal | undefined
+	): Promise<TransportResponse>;
+	connect(
+		url: URL,
+		protocols: string[],
+		requestHeaders: RawHeaders,
+		onopen: (protocol: string, extensions: string) => void,
+		onmessage: (data: WebSocketData) => void,
+		onclose: (code: number, reason: string) => void,
+		onerror: (error: string) => void
+	): [
+		(data: WebSocketData) => void,
+		(code: number, reason: string) => void,
+	];
+};
+
+class ResilientTransport {
+	ready = false;
+	private active: TransportLike | null = null;
+
+	constructor(
+		private primary: TransportLike,
+		private secondary: TransportLike
+	) {}
+
+	private async activate(transport: TransportLike) {
+		if (!transport.ready) await transport.init();
+		this.active = transport;
+		this.ready = true;
 	}
+
+	async init() {
+		if (this.active?.ready) {
+			this.ready = true;
+			return;
+		}
+
+		try {
+			await this.activate(this.primary);
+			return;
+		} catch (primaryError) {
+			console.warn(
+				"[scramjet] primary transport init failed, trying fallback",
+				primaryError
+			);
+		}
+
+		try {
+			await this.activate(this.secondary);
+		} catch (secondaryError) {
+			this.ready = false;
+			throw new Error("Both Scramjet transports failed to initialize", {
+				cause: secondaryError,
+			});
+		}
+	}
+
+	private alternate() {
+		return this.active === this.primary ? this.secondary : this.primary;
+	}
+
+	async request(
+		remote: URL,
+		method: string,
+		body: any,
+		headers: RawHeaders,
+		signal: AbortSignal | undefined
+	): Promise<TransportResponse> {
+		await this.init();
+		const current = this.active!;
+
+		try {
+			return await current.request(remote, method, body, headers, signal);
+		} catch (firstError) {
+			const fallback = this.alternate();
+			try {
+				await this.activate(fallback);
+			} catch {
+				throw firstError;
+			}
+
+			// Never replay a potentially state-changing request. The fallback
+			// becomes active for future requests, but only idempotent requests
+			// are retried automatically.
+			if (method !== "GET" && method !== "HEAD") {
+				throw firstError;
+			}
+
+			console.warn(
+				"[scramjet] transport request failed, retrying on fallback",
+				remote.href
+			);
+			return fallback.request(remote, method, body, headers, signal);
+		}
+	}
+
+	connect(
+		url: URL,
+		protocols: string[],
+		requestHeaders: RawHeaders,
+		onopen: (protocol: string, extensions: string) => void,
+		onmessage: (data: WebSocketData) => void,
+		onclose: (code: number, reason: string) => void,
+		onerror: (error: string) => void
+	): [
+		(data: WebSocketData) => void,
+		(code: number, reason: string) => void,
+	] {
+		const current = this.active!;
+		let sendImpl: (data: WebSocketData) => void = () => {};
+		let closeImpl: (code: number, reason: string) => void = () => {};
+		let opened = false;
+		let switching = false;
+		let intentionallyClosed = false;
+
+		const start = (transport: TransportLike, allowFallback: boolean) => {
+			const fallbackBeforeOpen = async (
+				error: string,
+				closeInfo?: [number, string]
+			) => {
+				if (
+					opened ||
+					switching ||
+					intentionallyClosed ||
+					!allowFallback
+				) {
+					if (closeInfo) onclose(...closeInfo);
+					else onerror(error);
+					return;
+				}
+
+				switching = true;
+				const fallback =
+					transport === this.primary ? this.secondary : this.primary;
+				try {
+					await this.activate(fallback);
+					switching = false;
+					start(fallback, false);
+				} catch {
+					switching = false;
+					onerror(error);
+				}
+			};
+
+			const [send, close] = transport.connect(
+				url,
+				protocols,
+				requestHeaders,
+				(protocol, extensions) => {
+					opened = true;
+					onopen(protocol, extensions);
+				},
+				onmessage,
+				(code, reason) => {
+					void fallbackBeforeOpen("transport closed before open", [
+						code,
+						reason,
+					]);
+				},
+				(error) => {
+					void fallbackBeforeOpen(error);
+				}
+			);
+
+			sendImpl = send;
+			closeImpl = close;
+		};
+
+		start(current, true);
+
+		return [
+			(data) => sendImpl(data),
+			(code, reason) => {
+				intentionallyClosed = true;
+				closeImpl(code, reason);
+			},
+		];
+	}
+}
+
+export function getTransport(): ResilientTransport {
+	const wispUrl = demoSettingsStore.wispUrl;
+	const libcurl = new LibcurlClient({ wisp: wispUrl });
+	const epoxy = new EpoxyClient({ wisp: wispUrl });
+
+	if (demoSettingsStore.transport === "epoxy") {
+		return new ResilientTransport(epoxy, libcurl);
+	}
+	return new ResilientTransport(libcurl, epoxy);
 }
 
 async function waitForControllerOrReady(timeoutMs = 10000): Promise<void> {
