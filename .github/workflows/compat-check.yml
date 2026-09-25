@@ -82,11 +82,14 @@ jobs:
           }
           JSON
 
+          cd /tmp/scramjet-render
+          git init
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch --orphan render-deploy
-          git rm -rf . >/dev/null 2>&1 || true
-          cp -R /tmp/scramjet-render/. .
+          git checkout -b render-deploy
           git add -A
           git commit -m "Render deployment for ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin render-deploy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
