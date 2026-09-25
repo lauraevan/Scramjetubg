@@ -37,23 +37,32 @@ export default [
 			const video = frame.locator("video.html5-main-video").first();
 			await video.waitFor({ state: "attached", timeout: 45000 });
 
+			// Headless Chromium may not start YouTube's media pipeline until it
+			// receives a user gesture. Trigger the real player control before
+			// deciding that the media transport is broken.
+			const player = frame.locator("#movie_player").first();
+			await player.waitFor({ state: "visible", timeout: 30000 });
+			const playButton = frame.locator(".ytp-large-play-button").first();
+			if (await playButton.isVisible().catch(() => false)) {
+				await playButton.click({ timeout: 10000 });
+			} else {
+				await player.click({
+					position: { x: 320, y: 180 },
+					timeout: 10000,
+				});
+			}
+
 			await video.evaluate(async (node: HTMLVideoElement) => {
 				const deadline = Date.now() + 30000;
 				while (node.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
 					if (Date.now() > deadline) {
 						throw new Error(
-							`YouTube video never received media data (readyState=${node.readyState}, networkState=${node.networkState})`
+							`YouTube video never received media data after play gesture (readyState=${node.readyState}, networkState=${node.networkState}, currentSrc=${node.currentSrc}, error=${node.error?.code ?? "none"})`
 						);
 					}
 					await new Promise((resolve) => setTimeout(resolve, 250));
 				}
 			});
-
-			// Use a real click first so Chromium treats this like a user gesture.
-			const player = frame.locator("#movie_player").first();
-			await player.click({ position: { x: 320, y: 180 }, timeout: 10000 }).catch(
-				() => {}
-			);
 
 			await video.evaluate(async (node: HTMLVideoElement) => {
 				if (node.paused) {
