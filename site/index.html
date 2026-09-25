@@ -3,141 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#080808">
-  <title>Scramjet UBG</title>
+  <meta name="theme-color" content="#000000">
+  <title>Scramjet</title>
   <style>
-    :root{color-scheme:dark;--bg:#080808;--panel:#101010;--panel2:#141414;--line:#242424;--muted:#777;--text:#f5f5f5;--accent:#f36d35}
-    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-    button,input{font:inherit}button{color:inherit}
-    body{overflow:hidden}.app{height:100%;display:flex;flex-direction:column;background:var(--bg)}
-    header{height:68px;flex:0 0 68px;display:flex;align-items:center;gap:24px;padding:0 28px;border-bottom:1px solid var(--line);background:#0b0b0b}
-    .brand{display:flex;align-items:center;gap:11px;border:0;background:none;padding:0;cursor:pointer}
-    .mark{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;background:var(--accent);color:#080808;font-weight:950;font-size:18px;letter-spacing:-.06em}
-    .brand-copy{display:flex;flex-direction:column;align-items:flex-start;line-height:1}.brand-copy strong{font-size:13px;letter-spacing:.14em}.brand-copy small{margin-top:5px;color:#666;font-size:9px;font-weight:800;letter-spacing:.24em}
-    nav{display:flex;align-items:center;gap:4px}.nav-btn{border:0;background:transparent;color:#777;padding:9px 11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}.nav-btn:hover,.nav-btn.active{background:#171717;color:#fff}
-    .status{margin-left:auto;display:flex;align-items:center;gap:8px;color:#888;font-size:12px;font-weight:650}.dot{width:7px;height:7px;border-radius:50%;background:#64d488}
-    main{flex:1;min-height:0;overflow:auto;padding:50px 34px 64px}.page{display:none}.page.active{display:block}.wrap{width:min(1060px,100%);margin:0 auto}
-    .eyebrow{margin:0 0 9px;color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.2em}.hero{padding:28px 0 30px}.hero h1{margin:0 0 10px;font-size:clamp(34px,5vw,58px);line-height:.98;letter-spacing:-.055em}.hero p{margin:0;color:#858585;font-size:14px;line-height:1.55}
-    .search{margin-top:28px;width:min(780px,100%);height:58px;display:flex;align-items:center;gap:11px;padding:7px 7px 7px 18px;border:1px solid #2a2a2a;border-radius:15px;background:#101010}
-    .search-symbol{color:#666;font-size:22px}.search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#fff;font-size:15px}.search input::placeholder{color:#555}.search button{height:42px;border:0;border-radius:10px;padding:0 18px;background:var(--accent);color:#080808;font-size:13px;font-weight:900;cursor:pointer}
-    .section{margin-top:34px}.section-head{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:16px}.section-head h2{margin:0;font-size:21px;letter-spacing:-.02em}.link-btn{border:0;background:none;color:#777;font-size:12px;cursor:pointer}.link-btn:hover{color:#fff}
-    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card{min-height:96px;display:flex;align-items:center;gap:13px;padding:15px;border:1px solid #222;border-radius:14px;background:#0f0f0f;text-align:left;cursor:pointer;transition:transform .14s ease,border-color .14s ease,background .14s ease}.card:hover{transform:translateY(-2px);border-color:#3b3b3b;background:#141414}
-    .icon{width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;border-radius:12px;background:#1a1a1a;color:var(--accent);font-size:13px;font-weight:950}.card span:last-child{display:flex;flex-direction:column}.card strong{font-size:13px}.card small{margin-top:4px;color:#666;font-size:11px}
-    .info-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-top:34px}.info{min-height:165px;padding:23px;border:1px solid #222;border-radius:16px;background:#0e0e0e}.info h3{margin:0 0 9px;font-size:17px}.info p{margin:0 0 18px;color:#7c7c7c;line-height:1.55;font-size:13px}.mono{display:inline-flex;padding:7px 9px;border:1px solid #282828;border-radius:8px;color:#999;font-family:"SFMono-Regular",Consolas,monospace;font-size:10px}
-    .catalog-head{margin:16px 0 26px}.catalog-head h1{margin:0 0 8px;font-size:40px;letter-spacing:-.04em}.catalog-head p{margin:0;color:#7d7d7d;font-size:13px}.catalog .card{min-height:170px;align-items:flex-start;flex-direction:column}.catalog .icon{width:54px;height:54px;margin-bottom:auto}
-    .browser-page{display:none;flex:1;min-height:0}.browser-page.active{display:flex;flex-direction:column}.browserbar{height:54px;flex:0 0 54px;display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid #222;background:#0b0b0b}
-    .browser-home,.browser-go{height:36px;border:0;border-radius:9px;cursor:pointer}.browser-home{width:36px;flex:0 0 36px;background:var(--accent);color:#080808;font-weight:950}.browser-input{height:36px;flex:1;min-width:0;display:flex;align-items:center;border:1px solid #272727;border-radius:10px;background:#111;padding:0 12px}.browser-input input{width:100%;border:0;outline:0;background:transparent;color:#ddd;font-size:12px}.browser-go{padding:0 14px;background:#181818;color:#bbb;border:1px solid #292929;font-size:12px;font-weight:750}.browser-go:hover{color:#fff;background:#202020}
-    iframe{flex:1;width:100%;min-height:0;border:0;background:#fff}.proxy-badge{padding:5px 8px;border:1px solid #292929;border-radius:8px;color:#777;font-size:9px;font-weight:900;letter-spacing:.14em}
-    @media(max-width:780px){header{height:60px;flex-basis:60px;padding:0 14px;gap:12px}.brand-copy,.status{display:none}nav{flex:1;justify-content:space-between}.nav-btn{padding:8px 9px;font-size:12px}main{padding:26px 16px 42px}.hero{padding-top:18px}.hero h1{font-size:37px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.info-row{grid-template-columns:1fr}.browserbar{padding-left:8px;padding-right:8px}.proxy-badge{display:none}}
-    @media(max-width:430px){.grid{grid-template-columns:1fr}.nav-btn{padding-left:6px;padding-right:6px}.search-symbol{display:none}}
+    html,body,iframe{width:100%;height:100%;margin:0;border:0;padding:0}
+    html,body{overflow:hidden;background:#000}
+    iframe{display:block}
   </style>
 </head>
 <body>
-<div class="app">
-  <header>
-    <button class="brand" data-page="home"><span class="mark">S</span><span class="brand-copy"><strong>SCRAMJET</strong><small>UBG</small></span></button>
-    <nav>
-      <button class="nav-btn active" data-page="home">Home</button>
-      <button class="nav-btn" data-page="games">Games</button>
-      <button class="nav-btn" data-page="apps">Apps</button>
-      <button class="nav-btn" data-page="browser">Browser</button>
-    </nav>
-    <div class="status"><span class="dot"></span>Scramjet v2</div>
-  </header>
-
-  <main id="main">
-    <section class="page active" id="home"><div class="wrap">
-      <div class="hero">
-        <p class="eyebrow">SCRAMJET NETWORK</p>
-        <h1>What do you want to open?</h1>
-        <p>Search the web or launch a site through your Scramjet v2 proxy.</p>
-        <form class="search" id="homeSearch"><span class="search-symbol">⌕</span><input id="homeInput" autocomplete="off" spellcheck="false" placeholder="Search or enter a URL"><button>Open</button></form>
-      </div>
-      <section class="section">
-        <div class="section-head"><div><p class="eyebrow">QUICK LAUNCH</p><h2>Jump back in</h2></div><button class="link-btn" data-page="browser">Open browser →</button></div>
-        <div class="grid">
-          <button class="card launch" data-url="https://www.google.com"><span class="icon">G</span><span><strong>Google</strong><small>Search</small></span></button>
-          <button class="card launch" data-url="https://www.youtube.com"><span class="icon">▶</span><span><strong>YouTube</strong><small>Video</small></span></button>
-          <button class="card launch" data-url="https://discord.com/app"><span class="icon">D</span><span><strong>Discord</strong><small>Chat</small></span></button>
-          <button class="card launch" data-url="https://open.spotify.com"><span class="icon">S</span><span><strong>Spotify</strong><small>Music</small></span></button>
-        </div>
-      </section>
-      <section class="info-row">
-        <div class="info"><p class="eyebrow">BACKEND</p><h3>Render transport connected</h3><p>The site routes launches into your dedicated Scramjet v2 instance. We can add the full custom library and deeper integration next.</p><span class="mono">scramjet-v2-aswm.onrender.com</span></div>
-        <div class="info"><p class="eyebrow">NEXT</p><h3>Built to expand</h3><p>Favorites, recents, game art, categories, settings, and a larger catalog can plug into this shell without reworking the layout.</p></div>
-      </section>
-    </div></section>
-
-    <section class="page catalog" id="games"><div class="wrap">
-      <div class="catalog-head"><p class="eyebrow">GAMES</p><h1>Game portals</h1><p>A starter catalog for the first build.</p></div>
-      <div class="grid">
-        <button class="card launch" data-url="https://www.crazygames.com"><span class="icon">CG</span><span><strong>CrazyGames</strong><small>Browser games</small></span></button>
-        <button class="card launch" data-url="https://poki.com"><span class="icon">P</span><span><strong>Poki</strong><small>Instant play</small></span></button>
-        <button class="card launch" data-url="https://www.coolmathgames.com"><span class="icon">CM</span><span><strong>Coolmath Games</strong><small>Classics</small></span></button>
-        <button class="card launch" data-url="https://itch.io/games/html5"><span class="icon">IO</span><span><strong>itch.io</strong><small>HTML5 games</small></span></button>
-      </div>
-    </div></section>
-
-    <section class="page catalog" id="apps"><div class="wrap">
-      <div class="catalog-head"><p class="eyebrow">APPS</p><h1>Web apps</h1><p>Common sites ready to launch through Scramjet.</p></div>
-      <div class="grid">
-        <button class="card launch" data-url="https://www.youtube.com"><span class="icon">YT</span><span><strong>YouTube</strong><small>Video</small></span></button>
-        <button class="card launch" data-url="https://discord.com/app"><span class="icon">DC</span><span><strong>Discord</strong><small>Chat</small></span></button>
-        <button class="card launch" data-url="https://open.spotify.com"><span class="icon">SP</span><span><strong>Spotify</strong><small>Music</small></span></button>
-        <button class="card launch" data-url="https://www.reddit.com"><span class="icon">R</span><span><strong>Reddit</strong><small>Communities</small></span></button>
-      </div>
-    </div></section>
-  </main>
-
-  <section class="browser-page" id="browser">
-    <form class="browserbar" id="browserForm">
-      <button type="button" class="browser-home" data-page="home">S</button>
-      <label class="browser-input"><input id="browserInput" autocomplete="off" spellcheck="false" placeholder="Search or enter a URL"></label>
-      <button class="browser-go">Open</button>
-      <span class="proxy-badge">V2</span>
-    </form>
-    <iframe id="proxyFrame" title="Scramjet Browser" allow="autoplay; fullscreen; clipboard-read; clipboard-write"></iframe>
-  </section>
-</div>
-
-<script>
-  const PROXY = "https://scramjet-v2-aswm.onrender.com/";
-  const main = document.getElementById("main");
-  const browserPage = document.getElementById("browser");
-  const frame = document.getElementById("proxyFrame");
-  const browserInput = document.getElementById("browserInput");
-
-  function normalizeTarget(value){
-    const raw=(value||"").trim();
-    if(!raw) return "https://www.google.com";
-    if(/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw)) return raw;
-    if(!raw.includes(" ") && (raw.includes(".") || raw==="localhost")) return "https://" + raw;
-    return "https://www.google.com/search?q=" + encodeURIComponent(raw);
-  }
-
-  function setPage(name){
-    document.querySelectorAll(".nav-btn").forEach(function(btn){btn.classList.toggle("active",btn.dataset.page===name)});
-    document.querySelectorAll(".page").forEach(function(page){page.classList.toggle("active",page.id===name)});
-    const inBrowser=name==="browser";
-    main.style.display=inBrowser?"none":"block";
-    browserPage.classList.toggle("active",inBrowser);
-    if(inBrowser && !frame.src) frame.src=PROXY;
-  }
-
-  function launch(value){
-    const target=normalizeTarget(value);
-    browserInput.value=target;
-    setPage("browser");
-    frame.src=PROXY + "?goto=" + encodeURIComponent(target);
-  }
-
-  document.querySelectorAll("[data-page]").forEach(function(el){el.addEventListener("click",function(){setPage(el.dataset.page)})});
-  document.querySelectorAll(".launch").forEach(function(el){el.addEventListener("click",function(){launch(el.dataset.url)})});
-  document.getElementById("homeSearch").addEventListener("submit",function(e){e.preventDefault();launch(document.getElementById("homeInput").value)});
-  document.getElementById("browserForm").addEventListener("submit",function(e){e.preventDefault();launch(browserInput.value)});
-
-  const goto=new URL(location.href).searchParams.get("goto");
-  if(goto) launch(goto);
-</script>
+  <iframe
+    src="https://scramjet-v2-aswm.onrender.com/"
+    title="Scramjet"
+    allow="autoplay; fullscreen; clipboard-read; clipboard-write; microphone; camera"
+    referrerpolicy="no-referrer"
+  ></iframe>
 </body>
 </html>
