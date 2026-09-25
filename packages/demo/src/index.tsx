@@ -2,31 +2,16 @@ import LoadInterstitial from "./components/LoadInterstitial";
 import App from "./App";
 import LibcurlClient from "@mercuryworkshop/libcurl-transport";
 import EpoxyClient from "@mercuryworkshop/epoxy-transport";
-import {
-	defaultConfig,
-	type ScramjetConfig,
-} from "@mercuryworkshop/scramjet";
+import { defaultConfig, type ScramjetConfig } from "@mercuryworkshop/scramjet";
 import { Controller } from "@mercuryworkshop/scramjet-controller";
 import { HttpCachePlugin } from "@mercuryworkshop/scramjet-utils";
-import { demoSettingsStore } from "./store";
+import { demoSettingsStore, PERFORMANCE_FLAGS } from "./store";
 
 let app = document.getElementById("app")!;
 
 const performanceConfig: ScramjetConfig = {
 	...defaultConfig,
-	flags: {
-		...defaultConfig.flags,
-		rewriterLogs: false,
-		captureErrors: false,
-		cleanErrors: false,
-		scramitize: false,
-		sourcemaps: false,
-		allowInvalidJs: true,
-		debugTrampolines: false,
-		allowFailedIntercepts: true,
-		debugSourceURL: false,
-		encapsulateWorkers: true,
-	},
+	flags: { ...PERFORMANCE_FLAGS },
 };
 
 let controller: InstanceType<typeof Controller>;
