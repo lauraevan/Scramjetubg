@@ -1,4 +1,5 @@
 import { createStore } from "dreamland/core";
+import { defaultConfig, type ScramjetFlags } from "@mercuryworkshop/scramjet";
 
 export type AvailableTransports = "libcurl" | "epoxy";
 
@@ -15,6 +16,20 @@ const DEFAULT_WISP_URL =
 const DEFAULT_TRANSPORT: AvailableTransports = "libcurl";
 const DEFAULT_HOME_URL = "https://google.com";
 const DEFAULT_MAX_REQUESTS = 200;
+
+export const PERFORMANCE_FLAGS: ScramjetFlags = {
+	...defaultConfig.flags,
+	rewriterLogs: false,
+	captureErrors: false,
+	cleanErrors: false,
+	scramitize: false,
+	sourcemaps: false,
+	allowInvalidJs: true,
+	debugTrampolines: false,
+	allowFailedIntercepts: true,
+	debugSourceURL: false,
+	encapsulateWorkers: true,
+};
 
 export const demoSettingsStore = createStore(
 	{
