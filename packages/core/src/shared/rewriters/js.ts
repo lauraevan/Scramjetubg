@@ -25,13 +25,19 @@ function rewriteJsWasm(
 	source: string | null,
 	context: ScramjetContext,
 	meta: URLMeta,
-	isModule: boolean
+	isModule: boolean,
+	flagOverrides?: Record<string, boolean>
 ): RewriterResult {
 	const [rewriter, ret] = getRewriter(context, meta);
 
 	const flagsobj = {};
 	for (const flag of Object_keys(context.config.flags)) {
 		flagsobj[flag] = flagEnabled(flag as any, context, meta.base);
+	}
+	if (flagOverrides) {
+		for (const flag of Object_keys(flagOverrides)) {
+			flagsobj[flag] = flagOverrides[flag];
+		}
 	}
 
 	try {
@@ -114,7 +120,7 @@ export function rewriteJs(
 		const res = rewriteJsInner(js, url, context, meta, isModule);
 		let newjs = res.js;
 
-		if (flagEnabled("sourcemaps", context, meta.base)) {
+		if (flagEnabled("sourcemaps", context, meta.base) && res.map) {
 			const pushmap = globalThis[context.config.globals.pushsourcemapfn];
 			if (pushmap) {
 				pushmap(Array_from(res.map), res.tag);
@@ -143,16 +149,41 @@ export function rewriteJs(
 
 		return newjs;
 	} catch (err) {
+		const firstError = err as Error;
 		dbg.warn(
 			"failed rewriting js for",
 			url || "(unknown)",
-			err.message,
+			firstError.message,
 			typeof js !== "string" ? TextDecoder_decode(js) : js
 		);
+
+		// Compatibility retry: a number of large/minified applications trip
+		// experimental transforms even though the underlying JS is valid.
+		// Retry once with the highest-risk transforms disabled before falling
+		// back to the original source.
+		try {
+			const retry = rewriteJsWasm(js, url, context, meta, isModule, {
+				destructureRewrites: false,
+				captureErrors: false,
+				scramitize: false,
+				sourcemaps: false,
+			});
+			if (flagEnabled("rewriterLogs", context, meta.base)) {
+				dbg.warn("compatibility rewrite succeeded for", url || "(unknown)");
+			}
+			return retry.js;
+		} catch (retryErr) {
+			const secondError = retryErr as Error;
+			dbg.warn(
+				"compatibility rewrite also failed for",
+				url || "(unknown)",
+				secondError.message
+			);
+		}
+
 		if (flagEnabled("allowInvalidJs", context, meta.base)) {
 			return js;
-		} else {
-			throw err;
 		}
+		throw firstError;
 	}
 }
