@@ -115,7 +115,7 @@ jobs:
               "node": "22.x"
             },
             "dependencies": {
-              "@mercuryworkshop/wisp-js": "0.4.1"
+              "@mercuryworkshop/wisp-js": "0.5.0"
             },
             "scripts": {
               "start": "node server.mjs"
