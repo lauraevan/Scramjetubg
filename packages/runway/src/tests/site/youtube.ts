@@ -56,8 +56,37 @@ export default [
 				const deadline = Date.now() + 30000;
 				while (node.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
 					if (Date.now() > deadline) {
+						const moviePlayer = document.querySelector("#movie_player") as any;
+						const playerResponse =
+							moviePlayer?.getPlayerResponse?.() ??
+							(window as any).ytInitialPlayerResponse ??
+							null;
+						const playability =
+							playerResponse?.playabilityStatus ??
+							(window as any).ytplayer?.config?.args?.playabilityStatus ??
+							null;
+						const errorText =
+							(document.querySelector(".ytp-error-content-wrap")?.textContent ??
+								document.querySelector("yt-player-error-message-renderer")?.textContent ??
+								"")
+								.trim()
+								.replace(/\s+/g, " ")
+								.slice(0, 500);
+
 						throw new Error(
-							`YouTube video never received media data after play gesture (readyState=${node.readyState}, networkState=${node.networkState}, currentSrc=${node.currentSrc}, error=${node.error?.code ?? "none"})`
+							`YouTube video never received media data after play gesture: ${JSON.stringify({
+								readyState: node.readyState,
+								networkState: node.networkState,
+								currentSrc: node.currentSrc,
+								src: node.getAttribute("src"),
+								mediaError: node.error
+									? { code: node.error.code, message: node.error.message }
+									: null,
+								playerState: moviePlayer?.getPlayerState?.() ?? null,
+								videoData: moviePlayer?.getVideoData?.() ?? null,
+								playability,
+								errorText,
+							})}`
 						);
 					}
 					await new Promise((resolve) => setTimeout(resolve, 250));
