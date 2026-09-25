@@ -6,6 +6,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: write
+
 env:
   WASM_BINDGEN_VERSION: "0.2.105"
 
@@ -14,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -42,3 +47,46 @@ jobs:
       - name: Build controller
         run: pnpm build
         working-directory: packages/controller
+
+      - name: Build utils
+        run: pnpm build
+        working-directory: packages/utils
+
+      - name: Build demo
+        run: pnpm build
+        working-directory: packages/demo
+
+      - name: Publish Render deployment branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/scramjet-render
+          mkdir -p /tmp/scramjet-render/public
+          cp -R packages/demo/dist/. /tmp/scramjet-render/public/
+          cp render/server.mjs /tmp/scramjet-render/server.mjs
+          cat > /tmp/scramjet-render/package.json <<'JSON'
+          {
+            "name": "scramjet-v2-render",
+            "private": true,
+            "type": "module",
+            "engines": {
+              "node": ">=20"
+            },
+            "dependencies": {
+              "@mercuryworkshop/wisp-js": "0.4.1"
+            },
+            "scripts": {
+              "start": "node server.mjs"
+            }
+          }
+          JSON
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --orphan render-deploy
+          git rm -rf . >/dev/null 2>&1 || true
+          cp -R /tmp/scramjet-render/. .
+          git add -A
+          git commit -m "Render deployment for ${GITHUB_SHA}"
+          git push --force origin render-deploy
