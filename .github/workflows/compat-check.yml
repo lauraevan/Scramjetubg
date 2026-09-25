@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: scramjet-v2-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   WASM_BINDGEN_VERSION: "0.2.105"
 
@@ -65,6 +69,43 @@ jobs:
           mkdir -p /tmp/scramjet-render/public
           cp -R packages/demo/dist/. /tmp/scramjet-render/public/
           cp render/server.mjs /tmp/scramjet-render/server.mjs
+
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          import zlib from "node:zlib";
+
+          const root = "/tmp/scramjet-render/public";
+          const compressible = new Set([
+            ".html", ".js", ".mjs", ".css", ".json", ".svg", ".wasm", ".map"
+          ]);
+
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                walk(full);
+                continue;
+              }
+              const ext = path.extname(entry.name).toLowerCase();
+              if (!compressible.has(ext)) continue;
+              const data = fs.readFileSync(full);
+              if (data.length < 1024) continue;
+
+              fs.writeFileSync(
+                full + ".br",
+                zlib.brotliCompressSync(data, {
+                  params: {
+                    [zlib.constants.BROTLI_PARAM_QUALITY]: 9
+                  }
+                })
+              );
+              fs.writeFileSync(full + ".gz", zlib.gzipSync(data, { level: 9 }));
+            }
+          }
+
+          walk(root);
+          NODE
           cat > /tmp/scramjet-render/package.json <<'JSON'
           {
             "name": "scramjet-v2-render",
