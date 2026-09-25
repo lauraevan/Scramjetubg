@@ -41,7 +41,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Build rewriter WASM
-        run: pnpm rewriter:build
+        run: RELEASE=1 OPTIMIZE_FOR_SPEED=1 pnpm rewriter:build
         working-directory: packages/core
 
       - name: Build core
