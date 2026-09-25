@@ -60,6 +60,15 @@ jobs:
         run: pnpm build
         working-directory: packages/demo
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/runway
+
+      - name: YouTube compatibility smoke test
+        continue-on-error: true
+        run: OMIT_WPT=1 RUNWAY_FAST=1 pnpm test site-youtube
+        working-directory: packages/runway
+
       - name: Publish Render deployment branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
