@@ -17,6 +17,27 @@ import {
 import { sniffEncoding } from "@/shared/sniffEncoding";
 import { _TextDecoder } from "@/shared/snapshot";
 
+function isAmbiguousDocumentMimeType(contentType: string): boolean {
+	const mime = contentType.split(";", 1)[0].trim().toLowerCase();
+	return (
+		mime === "" ||
+		mime === "text/plain" ||
+		mime === "application/octet-stream" ||
+		mime === "binary/octet-stream"
+	);
+}
+
+function looksLikeHtml(content: string): boolean {
+	const prefix = content.slice(0, 2048).trimStart().toLowerCase();
+	return (
+		prefix.startsWith("<!doctype html") ||
+		prefix.startsWith("<html") ||
+		prefix.startsWith("<head") ||
+		prefix.startsWith("<body") ||
+		prefix.startsWith("<!--")
+	);
+}
+
 export async function rewriteBody(
 	handler: ScramjetFetchHandler,
 	request: ScramjetFetchRequest,
@@ -25,27 +46,34 @@ export async function rewriteBody(
 ): Promise<BodyType> {
 	switch (parsed.destination) {
 		case "iframe":
-		case "document":
-			if (isHtmlMimeType(response.headers.get("content-type") ?? "")) {
-				const buf = await response.arrayBuffer();
-				const bytes = new Uint8Array(buf);
-				const encoding = sniffEncoding(
-					bytes,
-					response.headers.get("content-type")
-				);
-				const htmlContent = new _TextDecoder(encoding).decode(bytes);
-
-				return rewriteHtml(htmlContent, handler.context, parsed.meta, {
-					loadScripts: true,
-					inline: true,
-					source: parsed.url.href,
-					headers: response.rawHeaders,
-					// reasonably confident that a document fetch is impossible without a client
-					history: parsed.trackedClient!.history,
-				});
-			} else {
+		case "document": {
+			const contentType = response.headers.get("content-type") ?? "";
+			const declaredHtml = isHtmlMimeType(contentType);
+			if (!declaredHtml && !isAmbiguousDocumentMimeType(contentType)) {
 				return response.body;
 			}
+
+			const buf = await response.arrayBuffer();
+			const bytes = new Uint8Array(buf);
+			const encoding = sniffEncoding(bytes, contentType);
+			const htmlContent = new _TextDecoder(encoding).decode(bytes);
+
+			// Some CDNs and small sites serve HTML with no MIME type, text/plain,
+			// or application/octet-stream. Only override those ambiguous types
+			// when the payload itself strongly resembles an HTML document.
+			if (!declaredHtml && !looksLikeHtml(htmlContent)) {
+				return buf;
+			}
+
+			return rewriteHtml(htmlContent, handler.context, parsed.meta, {
+				loadScripts: true,
+				inline: true,
+				source: parsed.url.href,
+				headers: response.rawHeaders,
+				// reasonably confident that a document fetch is impossible without a client
+				history: parsed.trackedClient!.history,
+			});
+		}
 		case "script": {
 			// do not attempt to rewrite a 404 response
 			if (response.ok) {
