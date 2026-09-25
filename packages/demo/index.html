@@ -6,6 +6,17 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Scramjet Demo</title>
 
+		<link
+			rel="preload"
+			href="/scramjet/scramjet.wasm"
+			as="fetch"
+			type="application/wasm"
+			crossorigin
+		/>
+		<link rel="preload" href="/scramjet/scramjet.js" as="script" />
+		<link rel="preload" href="/controller/controller.api.js" as="script" />
+		<link rel="preload" href="/controller/controller.sw.js" as="script" />
+
 		<script src="/scramjet/scramjet.js"></script>
 		<script src="/controller/controller.api.js"></script>
 	</head>
