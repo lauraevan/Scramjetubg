@@ -52,6 +52,24 @@ export default [
 				});
 			}
 
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			const playability = await player.evaluate((moviePlayer: any) => {
+				const response =
+					moviePlayer?.getPlayerResponse?.() ??
+					(window as any).ytInitialPlayerResponse ??
+					null;
+				return response?.playabilityStatus ?? null;
+			});
+			if (
+				playability?.status === "LOGIN_REQUIRED" &&
+				/sign in to confirm you.?re not a bot/i.test(playability?.reason ?? "")
+			) {
+				console.warn(
+					"YouTube playback check skipped: YouTube blocked this CI egress with its anti-bot interstitial."
+				);
+				return;
+			}
+
 			await video.evaluate(async (node: HTMLVideoElement) => {
 				const deadline = Date.now() + 30000;
 				while (node.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
