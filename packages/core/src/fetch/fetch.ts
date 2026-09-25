@@ -18,6 +18,7 @@ import { rewriteBody } from "./body";
 import { Tap } from "@/Tap";
 import {
 	computeFetchSite,
+	registrableDomain,
 	rewriteRequestHeaders,
 	rewriteResponseHeaders,
 	worstFetchSite,
@@ -120,8 +121,8 @@ export async function doHandleFetch(
 		const crossSiteRedirect =
 			parsed.crossSiteRedirect ||
 			(!!initiatorOriginUrl &&
-				registrableDomainForRedirect(initiatorOriginUrl.hostname) !==
-					registrableDomainForRedirect(parsed.url.hostname));
+				registrableDomain(initiatorOriginUrl.hostname) !==
+					registrableDomain(parsed.url.hostname));
 
 		// Sec-Fetch-Site chain state: combine the worst classification seen so
 		// far with the relation between the initiator and *this* hop's URL.
@@ -286,7 +287,7 @@ async function handleBlobOrDataUrlFetch(
 }
 
 /** Simplified registrable-domain check used for cross-site redirect detection. */
-export function registrableDomainForRedirect(hostname: string): string {
+export function registrableDomain(hostname: string): string {
 	if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) return hostname;
 	const labels = hostname.split(".");
 	if (labels.length <= 1) return hostname;
