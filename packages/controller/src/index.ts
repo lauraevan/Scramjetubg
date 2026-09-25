@@ -255,6 +255,7 @@ export class Controller {
 	private cookieSyncChannel = new BroadcastChannel(BROADCASTCHANNEL_NAME);
 
 	private wasmAlreadyFetched = false;
+	private wasmBuffer: ArrayBuffer | null = null;
 	private wasmPayload: string | null = null;
 	private onTabChannelMessage: (e: MessageEvent) => void = (e) => {
 		this.rpc.recieve(e.data);
@@ -273,12 +274,14 @@ export class Controller {
 	};
 
 	private async loadScramjetWasm() {
-		if (this.wasmAlreadyFetched) {
+		if (this.wasmAlreadyFetched && this.wasmBuffer) {
 			return;
 		}
 
 		const resp = await fetch(this.config.wasmPath);
-		setWasm(await resp.arrayBuffer());
+		const buffer = await resp.arrayBuffer();
+		this.wasmBuffer = buffer;
+		setWasm(buffer);
 		this.wasmAlreadyFetched = true;
 	}
 
@@ -299,16 +302,17 @@ export class Controller {
 
 				if (path === frame.prefix + this.config.virtualWasmPath) {
 					if (!this.wasmPayload) {
-						const resp = await fetch(this.config.wasmPath);
-						const buf = await resp.arrayBuffer();
-						const b64 = btoa(
-							new Uint8Array(buf)
-								.reduce(
-									(data, byte) => (data.push(String.fromCharCode(byte)), data),
-									[] as any
-								)
-								.join("")
-						);
+						await this.loadScramjetWasm();
+						const buf = this.wasmBuffer!;
+						const bytes = new Uint8Array(buf);
+						let binary = "";
+						const chunkSize = 0x8000;
+						for (let i = 0; i < bytes.length; i += chunkSize) {
+							binary += String.fromCharCode(
+								...bytes.subarray(i, i + chunkSize)
+							);
+						}
+						const b64 = btoa(binary);
 
 						this.wasmPayload = `self.WASM = '${b64}';`;
 					}
