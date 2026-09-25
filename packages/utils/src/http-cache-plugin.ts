@@ -161,6 +161,18 @@ function isCacheableMethod(method: string): boolean {
 	return method === "GET" || method === "HEAD";
 }
 
+function shouldBypassCacheForStreamingRequest(
+	request: ScramjetFetchRequest,
+	destination: RequestDestination
+): boolean {
+	return (
+		request.initialHeaders.has("range") ||
+		request.initialHeaders.has("if-range") ||
+		destination === "video" ||
+		destination === "audio"
+	);
+}
+
 /**
  * Whether a response (status + Cache-Control + Vary) is allowed to be stored.
  * RFC 9110 §15.1 + RFC 9111 §3. `headers` is the upstream's raw response
@@ -410,6 +422,8 @@ export class HttpCachePlugin extends ManagedPlugin {
 		this.tap(hooks.request, async (ctx, props) => {
 			const req = ctx.request;
 			if (!isCacheableMethod(req.method)) return;
+			if (shouldBypassCacheForStreamingRequest(req, ctx.parsed.destination))
+				return;
 			const reqCache = req.cache as string;
 			// Honour the request's own cache mode where it asks for fresh data.
 			if (reqCache === "no-store" || reqCache === "reload") return;
@@ -526,6 +540,8 @@ export class HttpCachePlugin extends ManagedPlugin {
 
 			if ((req.cache as string) === "no-store") return;
 			if (!isCacheableMethod(req.method)) return;
+			if (shouldBypassCacheForStreamingRequest(req, ctx.parsed.destination))
+				return;
 
 			const revalidation = this.revalidationCandidates.get(req);
 			if (revalidation) {
