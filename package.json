@@ -1,0 +1,14 @@
+{
+  "name": "scramjet-v2-render",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@mercuryworkshop/wisp-js": "0.5.0"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

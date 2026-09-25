@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<link rel="icon" type="image/svg+xml" href="/icon.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Scramjet Demo</title>
+
+		<link
+			rel="preload"
+			href="/scramjet/scramjet.wasm"
+			as="fetch"
+			type="application/wasm"
+			crossorigin
+		/>
+		<link rel="preload" href="/scramjet/scramjet.js" as="script" />
+		<link rel="preload" href="/controller/controller.api.js" as="script" />
+		<link rel="preload" href="/controller/controller.sw.js" as="script" />
+
+		<script src="/scramjet/scramjet.js"></script>
+		<script src="/controller/controller.api.js"></script>
+		<script type="module" crossorigin src="/assets/index-BnTMOxkE.js"></script>
+		<link rel="stylesheet" crossorigin href="/assets/index-cUh8D1R6.css">
+	</head>
+
+	<body class="light-mode">
+		<div id="app"></div>
+	</body>
+</html>
