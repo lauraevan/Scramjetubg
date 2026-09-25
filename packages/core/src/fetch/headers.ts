@@ -508,7 +508,7 @@ function computeSameSiteContext(
  * This is a simplified implementation that handles common test cases
  * (localhost, IPs, and typical domain structures) without a full PSL lookup.
  */
-function registrableDomain(hostname: string): string {
+export function registrableDomain(hostname: string): string {
 	const parsed = parseDomain(hostname);
 
 	if (parsed.type === ParseResultType.Listed && parsed.domain) {
