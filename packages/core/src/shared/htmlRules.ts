@@ -2,9 +2,9 @@ import { rewriteCss } from "@rewriters/css";
 import { rewriteHtml, rewriteSrcset } from "@rewriters/html";
 import { rewriteUrl, unrewriteBlob, URLMeta } from "@rewriters/url";
 import { ScramjetContext } from "@/shared";
-import { _URL } from "./snapshot";
+import { _URL, _Map, Object_entries } from "./snapshot";
 
-export const htmlRules: {
+export type HtmlRule = {
 	[key: string]: "*" | string[] | ((...any: any[]) => string | null);
 	fn: (
 		value: string,
@@ -12,7 +12,9 @@ export const htmlRules: {
 		meta: URLMeta,
 		attrs?: Record<string, string | undefined>
 	) => string | null;
-}[] = [
+};
+
+export const htmlRules: HtmlRule[] = [
 	{
 		fn: (value, context, meta) =>
 			rewriteUrl(value, context, meta, { navigateType: "location" }),
@@ -152,3 +154,32 @@ export const htmlRules: {
 		],
 	},
 ];
+
+const htmlRuleIndex = new _Map<string, HtmlRule[]>();
+
+for (const rule of htmlRules) {
+	for (const [attribute, selector] of Object_entries(rule)) {
+		if (attribute === "fn" || typeof selector === "function") continue;
+		const key = attribute.toLowerCase();
+		const bucket = htmlRuleIndex.get(key);
+		if (bucket) bucket.push(rule);
+		else htmlRuleIndex.set(key, [rule]);
+	}
+}
+
+export function findHtmlRule(
+	attribute: string,
+	tagName: string
+): HtmlRule | undefined {
+	const candidates = htmlRuleIndex.get(attribute.toLowerCase());
+	if (!candidates) return undefined;
+
+	const tag = tagName.toLowerCase();
+	for (const rule of candidates) {
+		const selector = rule[attribute.toLowerCase()];
+		if (selector === "*") return rule;
+		if (Array.isArray(selector) && selector.includes(tag)) return rule;
+	}
+
+	return undefined;
+}
