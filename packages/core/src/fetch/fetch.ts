@@ -73,12 +73,20 @@ export async function doHandleFetch(
 
 	if (isDocument(parsed)) {
 		// for document.referer
-		parsed.trackedClient?.history.push({
-			url: parsed.url.href,
-			refererPolicy: ScramjetHeaders.fromRawHeaders(response.rawHeaders).get(
-				"referrer-policy"
-			),
-		});
+		const history = parsed.trackedClient?.history;
+		if (history) {
+			history.push({
+				url: parsed.url.href,
+				refererPolicy: ScramjetHeaders.fromRawHeaders(response.rawHeaders).get(
+					"referrer-policy"
+				),
+			});
+			// A tab can navigate for hours. Keep enough history for referrer
+			// behaviour without letting this grow forever.
+			if (history.length > 128) {
+				history.splice(0, history.length - 128);
+			}
+		}
 	}
 
 	const responseHeaders = await rewriteResponseHeaders(
@@ -211,7 +219,21 @@ export async function doNetworkFetch(
 			earlyResponse = BareResponse.fromNativeResponse(resp);
 		}
 	} else {
-		earlyResponse = await handler.client.fetch(reqprops.url, reqprops.init);
+		try {
+			earlyResponse = await handler.client.fetch(reqprops.url, reqprops.init);
+		} catch (firstError) {
+			// GET and HEAD are idempotent. A single retry absorbs transient
+			// Wisp/transport resets without risking duplicate form submissions.
+			if (request.method !== "GET" && request.method !== "HEAD") {
+				throw firstError;
+			}
+			dbg.warn(
+				"transport fetch failed; retrying idempotent request once",
+				reqprops.url.href,
+				firstError
+			);
+			earlyResponse = await handler.client.fetch(reqprops.url, reqprops.init);
+		}
 	}
 
 	const prerespcontext: typeof handler.hooks.fetch.preresponse.context = {
