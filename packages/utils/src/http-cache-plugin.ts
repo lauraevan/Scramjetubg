@@ -37,11 +37,9 @@
 //   - `Vary` is honoured by storing one entry per (URL × selected-headers)
 //     pair via the underlying Cache API's built-in matching.
 //
-// 304 revalidation isn't handled here yet -- stale entries fall through to
-// a full refetch. Adding it cleanly requires a hook position that lets us
-// substitute the cached body AFTER the network 304 arrives but BEFORE
-// `rewriteBody` runs, without going through `rewriteBody` again. That can
-// come later.
+// Stale entries with ETag / Last-Modified validators are conditionally
+// revalidated. A 304 response refreshes metadata while reusing the cached body,
+// avoiding a full payload download.
 
 import {
 	BareResponse,
@@ -259,6 +257,45 @@ function strippedHeadersFromStored(stored: Response): Headers {
 	return out;
 }
 
+function setRawRequestHeader(
+	headers: [string, string][],
+	name: string,
+	value: string
+) {
+	const lower = name.toLowerCase();
+	for (let i = headers.length - 1; i >= 0; i--) {
+		if (headers[i][0].toLowerCase() === lower) headers.splice(i, 1);
+	}
+	headers.push([name, value]);
+}
+
+function mergeRevalidatedHeaders(
+	cached: Response,
+	revalidationRawHeaders: ReadonlyArray<readonly [string, string]>
+): [string, string][] {
+	const merged: [string, string][] = [];
+	for (const [name, value] of strippedHeadersFromStored(cached).entries()) {
+		merged.push([name, value]);
+	}
+
+	for (const [name, value] of revalidationRawHeaders) {
+		const lower = name.toLowerCase();
+		if (
+			lower === "content-length" ||
+			lower === "content-range" ||
+			lower === "transfer-encoding"
+		) {
+			continue;
+		}
+		for (let i = merged.length - 1; i >= 0; i--) {
+			if (merged[i][0].toLowerCase() === lower) merged.splice(i, 1);
+		}
+		merged.push([name, value]);
+	}
+
+	return merged;
+}
+
 /**
  * Turn an upstream BareResponse into a BareResponse that:
  *   - has the same headers/status/statusText
@@ -310,7 +347,9 @@ function buildStorableResponse(
 	statusText: string,
 	rawHeaders: ReadonlyArray<readonly [string, string]>
 ): Response {
-	const native = nativeHeadersFromRaw(rawHeaders);
+	const native = nativeHeadersFromRaw(
+		rawHeaders.filter(([name]) => name.toLowerCase() !== "set-cookie")
+	);
 	native.set(STORED_AT_HEADER, String(Date.now()));
 	return new Response(NULL_BODY_STATUSES.has(status) ? null : body, {
 		status,
@@ -342,6 +381,10 @@ export class HttpCachePlugin extends ManagedPlugin {
 	// preresponse hook below knows not to re-store them. WeakMap keys are
 	// the request objects so entries clean themselves up automatically.
 	private cameFromCache = new WeakMap<ScramjetFetchRequest, true>();
+	private revalidationCandidates = new WeakMap<
+		ScramjetFetchRequest,
+		{ stored: Response; cacheKey: Request }
+	>();
 
 	constructor(options: HttpCachePluginOptions = {}) {
 		super("scramjet-http-cache", []);
@@ -414,8 +457,33 @@ export class HttpCachePlugin extends ManagedPlugin {
 				reqCache !== "no-cache" &&
 				reqCache !== "reload";
 
-			if (!fresh && !immutable) {
-				// Stale; fall through to the network. (TODO: 304 revalidation.)
+			const forceUse =
+				reqCache === "force-cache" || reqCache === "only-if-cached";
+
+			if (!fresh && !immutable && !forceUse) {
+				const etag = stored.headers.get("etag");
+				const lastModified = stored.headers.get("last-modified");
+				if (!etag && !lastModified) {
+					return;
+				}
+
+				const requestHeaders = (props.init.headers ??= []);
+				if (etag) setRawRequestHeader(requestHeaders, "If-None-Match", etag);
+				if (lastModified) {
+					setRawRequestHeader(
+						requestHeaders,
+						"If-Modified-Since",
+						lastModified
+					);
+				}
+
+				this.revalidationCandidates.set(req, {
+					stored,
+					cacheKey: buildCacheKeyRequest(
+						ctx.parsed.url.href,
+						req.initialHeaders
+					),
+				});
 				return;
 			}
 
@@ -458,6 +526,53 @@ export class HttpCachePlugin extends ManagedPlugin {
 
 			if ((req.cache as string) === "no-store") return;
 			if (!isCacheableMethod(req.method)) return;
+
+			const revalidation = this.revalidationCandidates.get(req);
+			if (revalidation) {
+				this.revalidationCandidates.delete(req);
+				if (props.response.status === 304) {
+					const mergedRawHeaders = mergeRevalidatedHeaders(
+						revalidation.stored,
+						props.response.rawHeaders
+					);
+					const cachedBody = NULL_BODY_STATUSES.has(
+						revalidation.stored.status
+					)
+						? null
+						: await revalidation.stored.arrayBuffer();
+					const nativeHeaders = nativeHeadersFromRaw(mergedRawHeaders);
+					const replacement = BareResponse.fromNativeResponse(
+						new Response(cachedBody, {
+							status: revalidation.stored.status,
+							statusText: revalidation.stored.statusText,
+							headers: nativeHeaders,
+						})
+					);
+					// Preserve raw header fidelity (especially multiple Set-Cookie
+					// fields from the 304) for the normal cookie pipeline.
+					replacement.rawHeaders = mergedRawHeaders;
+					props.response = replacement;
+
+					try {
+						const cache = await this.openCache();
+						await cache.put(
+							revalidation.cacheKey,
+							buildStorableResponse(
+								cachedBody,
+								replacement.status,
+								replacement.statusText,
+								mergedRawHeaders
+							)
+						);
+					} catch (err) {
+						console.warn(
+							"[scramjet-http-cache] 304 cache refresh failed:",
+							err
+						);
+					}
+					return;
+				}
+			}
 
 			const headers = nativeHeadersFromRaw(props.response.rawHeaders);
 			if (
