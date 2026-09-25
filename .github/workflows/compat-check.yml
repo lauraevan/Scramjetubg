@@ -64,6 +64,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/runway
 
+      - name: Media range regression test
+        run: OMIT_WPT=1 RUNWAY_FAST=1 pnpm test http-range-requests
+        working-directory: packages/runway
+
       - name: YouTube compatibility smoke test
         continue-on-error: true
         run: OMIT_WPT=1 RUNWAY_FAST=1 pnpm test site-youtube
