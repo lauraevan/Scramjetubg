@@ -4,6 +4,25 @@ import { RpcHelper } from "@mercuryworkshop/rpc";
 import type { Controllerbound, SWbound } from "./types";
 import type { RawHeaders } from "@mercuryworkshop/proxy-transports";
 
+function supportsTransferableStreams(): boolean {
+	try {
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.close();
+			},
+		});
+		const channel = new MessageChannel();
+		channel.port1.postMessage(stream, [stream]);
+		channel.port1.close();
+		channel.port2.close();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+const TRANSFERABLE_STREAMS = supportsTransferableStreams();
+
 function makeId(): string {
 	return Math.random().toString(36).substring(2, 10);
 }
@@ -171,6 +190,14 @@ export async function route(event: FetchEvent): Promise<Response> {
 
 		const rawheaders: RawHeaders = [...event.request.headers];
 
+		let requestBody: ReadableStream<Uint8Array> | ArrayBuffer | null =
+			event.request.body;
+		if (requestBody instanceof ReadableStream && !TRANSFERABLE_STREAMS) {
+			// WebKit cannot transfer request streams through MessagePort either.
+			// Preserve POST/PUT/PATCH bodies by buffering the request clone.
+			requestBody = await event.request.clone().arrayBuffer();
+		}
+
 		const response = await tab.rpc.call(
 			"request",
 			{
@@ -180,17 +207,16 @@ export async function route(event: FetchEvent): Promise<Response> {
 				mode: event.request.mode,
 				referrer: event.request.referrer,
 				method: event.request.method,
-				body: event.request.body,
+				body: requestBody,
 				cache: event.request.cache,
 				forceCrossOriginIsolated: false,
 				initialHeaders: rawheaders,
 				rawClientUrl: client ? client.url : undefined,
 				clientId: event.clientId || event.resultingClientId,
 			},
-			event.request.body instanceof ReadableStream ||
-				// @ts-expect-error the types for fetchevent are messed up
-				event.request.body instanceof ArrayBuffer
-				? [event.request.body]
+			requestBody instanceof ReadableStream ||
+			requestBody instanceof ArrayBuffer
+				? [requestBody]
 				: undefined
 		);
 
