@@ -77,7 +77,8 @@ function makeRewriteSuccessKey(
 	source: string | null,
 	context: ScramjetContext,
 	meta: URLMeta,
-	isModule: boolean
+	isModule: boolean,
+	cacheValidator?: string | null
 ): string {
 	return [
 		isModule ? "m" : "s",
@@ -86,7 +87,7 @@ function makeRewriteSuccessKey(
 		meta.base.href,
 		rewriteFlagsSignature(context, meta),
 		inputLength(input),
-		hashInput(input),
+		cacheValidator ? "v:" + cacheValidator : "h:" + hashInput(input),
 	].join("|");
 }
 
@@ -292,7 +293,8 @@ export function rewriteJs(
 	url: string | null,
 	context: ScramjetContext,
 	meta: URLMeta,
-	isModule = false
+	isModule = false,
+	cacheValidator?: string | null
 ): string | Uint8Array {
 	const failureKey = makeRewriteFingerprint(js, url, isModule);
 	const knownFailure = rewriteFailureCache.get(failureKey);
@@ -300,7 +302,14 @@ export function rewriteJs(
 		inputLength(js) >= REWRITE_SUCCESS_CACHE_MIN_ENTRY_BYTES &&
 		!flagEnabled("sourcemaps", context, meta.base);
 	const successKey = successCacheEnabled
-		? makeRewriteSuccessKey(js, url, context, meta, isModule)
+		? makeRewriteSuccessKey(
+				js,
+				url,
+				context,
+				meta,
+				isModule,
+				cacheValidator
+			)
 		: null;
 
 	if (successKey) {
