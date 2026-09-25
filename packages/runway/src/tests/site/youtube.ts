@@ -128,4 +128,66 @@ export default [
 			});
 		},
 	}),
+
+	playwrightTest({
+		name: "site-youtube-post-minute-playback",
+		fn: async ({ frame, navigate }) => {
+			// Long-lived YouTube IFrame API sample. Seeking past one minute
+			// exercises the later media ranges where Scramjet users have
+			// historically reported playback stopping.
+			await navigate("https://www.youtube.com/watch?v=M7lc1UVf-VE");
+
+			const video = frame.locator("video.html5-main-video").first();
+			await video.waitFor({ state: "attached", timeout: 45000 });
+
+			const player = frame.locator("#movie_player").first();
+			await player.waitFor({ state: "visible", timeout: 30000 });
+			const playButton = frame.locator(".ytp-large-play-button").first();
+			if (await playButton.isVisible().catch(() => false)) {
+				await playButton.click({ timeout: 10000 }).catch(() => {});
+			}
+
+			const playability = await player.evaluate((moviePlayer: any) => {
+				const response =
+					moviePlayer?.getPlayerResponse?.() ??
+					(window as any).ytInitialPlayerResponse ??
+					null;
+				return response?.playabilityStatus ?? null;
+			});
+			if (
+				playability?.status === "LOGIN_REQUIRED" &&
+				/sign in to confirm you.?re not a bot/i.test(playability?.reason ?? "")
+			) {
+				console.warn(
+					"YouTube post-minute playback check skipped: YouTube blocked this CI egress with its anti-bot interstitial."
+				);
+				return;
+			}
+
+			await video.evaluate(async (node: HTMLVideoElement) => {
+				const metadataDeadline = Date.now() + 30000;
+				while (!Number.isFinite(node.duration) || node.duration < 75) {
+					if (Date.now() > metadataDeadline) {
+						throw new Error(
+							`YouTube long-video metadata unavailable (duration=${node.duration}, readyState=${node.readyState}, networkState=${node.networkState})`
+						);
+					}
+					await new Promise((resolve) => setTimeout(resolve, 250));
+				}
+
+				node.currentTime = 70;
+				await node.play().catch(() => {});
+
+				const playbackDeadline = Date.now() + 20000;
+				while (node.currentTime < 71) {
+					if (Date.now() > playbackDeadline) {
+						throw new Error(
+							`YouTube playback did not survive post-minute seek (currentTime=${node.currentTime}, readyState=${node.readyState}, networkState=${node.networkState})`
+						);
+					}
+					await new Promise((resolve) => setTimeout(resolve, 250));
+				}
+			});
+		},
+	}),
 ];
