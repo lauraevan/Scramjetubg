@@ -1,4 +1,4 @@
-import { htmlRules } from "@/shared/htmlRules";
+import { findHtmlRule } from "@/shared/htmlRules";
 import {
 	String,
 	TextEncoder_encode,
@@ -295,14 +295,7 @@ export default function (client: ScramjetClient, self: typeof window) {
 			if (value != null) value = String(value);
 			ctx.args[1] = value;
 
-			const ruleList = htmlRules.find((rule) => {
-				const r = rule[name.toLowerCase()];
-				if (!r) return false;
-				if (r === "*") return true;
-				if (typeof r === "function") return false; // this can't happen but ts
-
-				return r.includes(tagName);
-			});
+			const ruleList = findHtmlRule(String(name), tagName);
 
 			if (ruleList) {
 				const ret = ruleList.fn(
@@ -339,14 +332,10 @@ export default function (client: ScramjetClient, self: typeof window) {
 			const name = String(ctx.args[1]);
 			const value = String(ctx.args[2]);
 
-			const ruleList = htmlRules.find((rule) => {
-				const r = rule[String(name).toLowerCase()];
-				if (!r) return false;
-				if (r === "*") return true;
-				if (typeof r === "function") return false; // this can't happen but ts
-
-				return r.includes(ctx.this.tagName.toLowerCase());
-			});
+			const ruleList = findHtmlRule(
+				String(name),
+				ctx.this.tagName.toLowerCase()
+			);
 
 			if (ruleList) {
 				ctx.args[2] = ruleList.fn(
