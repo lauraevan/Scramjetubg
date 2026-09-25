@@ -86,6 +86,12 @@ export function parseRequest(
 	if (clientId) {
 		trackedClient = handler.trackedClients.get(clientId);
 		if (!trackedClient) {
+			// Service-worker client ids can accumulate across long sessions.
+			// Keep the map bounded so closed tabs cannot leak forever.
+			if (handler.trackedClients.size >= 128) {
+				const oldest = handler.trackedClients.keys().next().value;
+				if (oldest !== undefined) handler.trackedClients.delete(oldest);
+			}
 			trackedClient = new ScramjetFetchTrackedClient(clientId);
 			handler.trackedClients.set(clientId, trackedClient);
 		}
