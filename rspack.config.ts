@@ -170,8 +170,9 @@ class TypeScriptDeclarationsPlugin {
 	}
 
 	apply(compiler: WebpackCompiler) {
-		compiler.hooks.afterEmit.tap("TypeScriptDeclarationsPlugin", () => {
-			(async () => {
+		compiler.hooks.afterEmit.tapPromise(
+			"TypeScriptDeclarationsPlugin",
+			async () => {
 				try {
 					console.log(`Generating TypeScript declarations for ${this.dir}...`);
 					try {
@@ -182,13 +183,12 @@ class TypeScriptDeclarationsPlugin {
 						if (stdout) console.log(stdout);
 						if (stderr && !stderr.includes("TS")) console.error(stderr);
 					} catch (tscError: any) {
-						// tsc exits with error code if there are TS errors, but still generates files
-						// Only log if it's not a TypeScript compilation error
+						// tsc may still emit declarations when it exits for type errors.
 						if (tscError.code !== 2) {
 							throw tscError;
 						}
-						// if (tscError.stdout) console.log(tscError.stdout);
-						// if (tscError.stderr) console.warn(tscError.stderr);
+						if (tscError.stdout) console.warn(tscError.stdout);
+						if (tscError.stderr) console.warn(tscError.stderr);
 					}
 
 					if (this.useAlias) {
@@ -202,7 +202,7 @@ class TypeScriptDeclarationsPlugin {
 
 					try {
 						await execAsync(`rm -rf ${this.tempDir}`, { cwd: this.dir });
-					} catch (e) {}
+					} catch {}
 
 					console.log(
 						`TypeScript declarations generated successfully for ${this.dir}`
@@ -213,8 +213,8 @@ class TypeScriptDeclarationsPlugin {
 						error.message
 					);
 				}
-			})();
-		});
+			}
+		);
 	}
 }
 
