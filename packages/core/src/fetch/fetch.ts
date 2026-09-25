@@ -308,16 +308,6 @@ async function handleBlobOrDataUrlFetch(
 	};
 }
 
-/** Simplified registrable-domain check used for cross-site redirect detection. */
-export function registrableDomain(hostname: string): string {
-	if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) return hostname;
-	const labels = hostname.split(".");
-	if (labels.length <= 1) return hostname;
-	if (labels[0] === "www") return labels.slice(1).join(".");
-	if (labels.length === 2) return hostname;
-	return labels.slice(-2).join(".");
-}
-
 async function handleCookies(
 	handler: ScramjetFetchHandler,
 	request: ScramjetFetchRequest,
