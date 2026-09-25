@@ -48,6 +48,11 @@ jobs:
         run: pnpm build
         working-directory: packages/core
 
+      - name: Diagnose core declaration types
+        continue-on-error: true
+        run: pnpm exec tsc --project tsconfig.types.json --pretty false
+        working-directory: packages/core
+
       - name: Benchmark rewrite cache
         continue-on-error: true
         run: node benchmarks/rewrite-cache.mjs
