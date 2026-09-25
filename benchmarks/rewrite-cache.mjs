@@ -47,9 +47,18 @@ const source =
 const sourceBytes = Buffer.byteLength(source);
 const sourceUrl = "https://www.youtube.com/s/player/scramjet-benchmark.js";
 
+const cacheValidator = '"scramjet-benchmark-v1"';
+
 const timed = () => {
 	const start = performance.now();
-	const output = rewriteJs(source, sourceUrl, context, meta, false);
+	const output = rewriteJs(
+		source,
+		sourceUrl,
+		context,
+		meta,
+		false,
+		`etag:${cacheValidator}`
+	);
 	const elapsed = performance.now() - start;
 	return { elapsed, output };
 };
