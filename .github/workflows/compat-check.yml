@@ -1,0 +1,40 @@
+name: Compatibility Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  WASM_BINDGEN_VERSION: "0.2.105"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - run: pnpm install
+
+      - name: Setup rewriter toolchain
+        uses: ./.github/actions/setup-rewriter-toolchain
+        with:
+          wasm-bindgen-version: ${{ env.WASM_BINDGEN_VERSION }}
+          rewriter-path: packages/core/rewriter
+          github-token: ${{ github.token }}
+
+      - name: Build core
+        run: pnpm build
+        working-directory: packages/core
+
+      - name: Build controller
+        run: pnpm build
+        working-directory: packages/controller
